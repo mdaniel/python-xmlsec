@@ -1,18 +1,6 @@
 name: Wheel build
 
 on:
-  release:
-    types: [created]
-  schedule:
-  #        ┌───────────── minute (0 - 59)
-  #        │  ┌───────────── hour (0 - 23)
-  #        │  │ ┌───────────── day of the month (1 - 31)
-  #        │  │ │ ┌───────────── month (1 - 12 or JAN-DEC)
-  #        │  │ │ │ ┌───────────── day of the week (0 - 6 or SUN-SAT)
-  #        │  │ │ │ │
-  - cron: "42 3 * * 4"
-  push:
-  pull_request:
   workflow_dispatch:
 
 permissions: {}
@@ -36,17 +24,31 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          pip install --upgrade pip setuptools wheel
+          pip3 install uv
+          uv venv .venv
+          source  .venv/bin/activate
+          uv pip install distutils setuptools wheel
 
       - name: Package source dist
-        run: python setup.py sdist
+        run: |
+          uv build --sdist --verbose
 
       - name: Install test dependencies
         run: |
           sudo apt-get update -y -q
           sudo apt-get install -y -q libxml2-dev libxslt1-dev libxmlsec1-dev libxmlsec1-openssl opensc softhsm2 libengine-pkcs11-openssl
-          pip install --upgrade -r requirements-test.txt --no-binary lxml
-          pip install dist/xmlsec-$(python setup.py --version).tar.gz
+          echo "### pre req-test"
+          cat requirements-test.txt
+          sed -i.bak -e 's|--no-binary.lxml||' requirements.txt
+          for i in req*.txt; do
+            echo "### $i"
+            cat $i
+            echo "###/$i"
+          done
+          uv pip install --upgrade -r requirements-test.txt --no-binary=lxml
+          v=$(python setup.py --version)
+          [[ -n "$v" ]] || exit 1
+          uv pip install dist/xmlsec-${v}.tar.gz
 
       - name: Run tests
         run: pytest -v --color=yes
@@ -67,15 +69,24 @@ jobs:
       include: ${{ steps.set-matrix.outputs.include }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # refs/tags/v4.2.2
+      - name: Install build dependencies
+        run: |
+          pip3 install uv
+          uv venv .venv
+          source  .venv/bin/activate
+
       - name: Install cibuildwheel
         # Nb. keep cibuildwheel version pin consistent with job below
-        run: pipx install cibuildwheel==2.23.2
+        run: |
+          uv pip install cibuildwheel==2.23.2
+
       - id: set-matrix
         # Once we have the windows build figured out, it can be added here
         # by updating the matrix to include windows builds as well.
         # See example here:
         # https://github.com/lxml/lxml/blob/3ccc7d583e325ceb0ebdf8fc295bbb7fc8cd404d/.github/workflows/wheels.yml#L95C1-L106C51
         run: |
+          cibuildwheel() { python3 -m cibuildwheel "$@"; }
           MATRIX=$(
             {
               cibuildwheel --print-build-identifiers --platform linux \
@@ -86,8 +97,7 @@ jobs:
               | jq -nRc '{"only": inputs, "os": "windows-2019"}'
             } | jq -sc
           )
-          echo "include=$MATRIX"
-          echo "include=$MATRIX" >> $GITHUB_OUTPUT
+          echo "include=$MATRIX" | tee -a "$GITHUB_OUTPUT"
 
   build_wheels:
     name: Build for ${{ matrix.only }}
@@ -95,7 +105,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         include: ${{ fromJson(needs.generate-wheels-matrix.outputs.include) }}
 
@@ -115,11 +125,22 @@ jobs:
         with:
           platforms: all
 
+      - name: Install build dependencies
+        run: |
+          pip3 install uv
+          uv venv .venv
+          source  .venv/bin/activate
+
+      - name: Install cibuildwheel
+        run: |
+          uv pip install cibuildwheel==2.23.2
+
       - name: Build wheels
-        uses: pypa/cibuildwheel@d04cacbc9866d432033b1d09142936e6a0e2121a #  v2.23.2
-        with:
-          only: ${{ matrix.only }}
+        # uses: pypa/cibuildwheel@d04cacbc9866d432033b1d09142936e6a0e2121a #  v2.23.2
+        run: |
+          python3 -m cibuildwheel --only ${{ matrix.only }} --output-dir wheelhouse
         env:
+          CIBW_BUILD_VERBOSITY: "2"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # refs/tags/v4.6.2

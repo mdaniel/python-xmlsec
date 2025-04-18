@@ -1,5 +1,6 @@
-name: linuxbrew
-on: [push, pull_request]
+name: linuxbrew test
+on:
+  workflow_dispatch:
 jobs:
   linuxbrew:
     runs-on: ubuntu-latest
@@ -16,21 +17,23 @@ jobs:
       - name: Install build dependencies
         run: |
           brew update
-          brew install python@${{ matrix.python }} gcc libxml2 libxmlsec1 pkg-config
+          brew install python@${{ matrix.python }} gcc@11 libxml2 libxmlsec1 pkg-config
           echo "/home/linuxbrew/.linuxbrew/opt/python@${{ matrix.python }}/libexec/bin" >> $GITHUB_PATH
       - name: Build wheel
         run: |
-          python3 -m venv build_venv
+          python3 -m pip install uv
+          uv venv build_venv
           source build_venv/bin/activate
-          pip3 install --upgrade setuptools wheel build
+          uv pip install --upgrade setuptools wheel build
           export CFLAGS="-I$(brew --prefix)/include"
           export LDFLAGS="-L$(brew --prefix)/lib"
-          python3 -m build
+          uv build --verbose
           rm -rf build/
       - name: Run tests
         run: |
-          python3 -m venv test_venv
+          python3 -m pip install uv
+          uv venv test_venv
           source test_venv/bin/activate
-          pip3 install --upgrade --no-binary=lxml -r requirements-test.txt
-          pip3 install xmlsec --only-binary=xmlsec --no-index --find-links=dist/
+          uv pip install --upgrade --no-binary=lxml -r requirements-test.txt
+          uv pip install xmlsec --only-binary=xmlsec --no-index --find-links=dist/
           pytest -v --color=yes

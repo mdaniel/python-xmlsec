@@ -1,5 +1,6 @@
-name: sdist
-on: [push, pull_request]
+name: sdist pytest
+on:
+  workflow_dispatch:
 jobs:
   sdist:
     runs-on: ubuntu-latest
@@ -14,16 +15,32 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install build dependencies
         run: |
-          pip install --upgrade pip setuptools wheel
+          pip install --upgrade uv
+          uv venv .venv
+          source  .venv/bin/activate
+          uv pip install distutils setuptools wheel
+
       - name: Package source dist
         run: |
-          python setup.py sdist
+          uv build --sdist --verbose
+
       - name: Install test dependencies
         run: |
           sudo apt-get update
           sudo apt-get install libxml2-dev libxmlsec1-dev libxmlsec1-openssl opensc softhsm2 libengine-pkcs11-openssl
-          pip install --upgrade -r requirements-test.txt --no-binary lxml
-          pip install dist/xmlsec-$(python setup.py --version).tar.gz
+          echo "### pre req-test"
+          cat requirements-test.txt
+          sed -i.bak -e 's|--no-binary.lxml||' requirements.txt
+          for i in req*.txt; do
+            echo "### $i"
+            cat $i
+            echo "###/$i"
+          done
+          uv pip install --upgrade -r requirements-test.txt --no-binary=lxml
+          v=$(python setup.py --version)
+          [[ -n "$v" ]] || exit 1
+          uv pip install dist/xmlsec-${v}.tar.gz
+
       - name: Run tests
         run: |
           pytest -v --color=yes

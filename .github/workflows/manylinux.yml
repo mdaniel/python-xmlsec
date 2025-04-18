@@ -1,5 +1,6 @@
 name: manylinux
-on: [push, pull_request]
+on:
+  workflow_dispatch:
 jobs:
   manylinux:
     runs-on: ubuntu-latest
@@ -17,7 +18,7 @@ jobs:
         run: |
           # https://github.com/actions/runner/issues/2033
           chown -R $(id -u):$(id -g) $PWD
-          /opt/python/${{ matrix.python-abi }}/bin/pip install --upgrade pip setuptools wheel build
+          /opt/python/${{ matrix.python-abi }}/bin/pip install --upgrade pip setuptools wheel build uv
       - name: Install system build dependencies (manylinux)
         run: |
           yum install -y perl-core
