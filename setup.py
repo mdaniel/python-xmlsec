@@ -105,7 +105,9 @@ def latest_libxslt_release():
 
 
 def latest_xmlsec_release():
-    return latest_release_from_html('https://www.aleksey.com/xmlsec/download/', re.compile('xmlsec1-(?P<version>.*).tar.gz'))
+    # this is the repo used by Wolfi, of Chainguard fame:
+    # https://github.com/wolfi-dev/os/blob/531b66b4cd8ad9760c38847b91fc38dfc09e9310/xmlsec.yaml#L41
+    return latest_release_from_github_api('lsh123/xmlsec')
 
 
 class CrossCompileInfo:
@@ -609,7 +611,7 @@ setup(
     author_email='support@mehcode.com',
     maintainer='Oleg Hoefling',
     maintainer_email='oleg.hoefling@gmail.com',
-    url='https://github.com/mehcode/python-xmlsec',
+    url='https://github.com/xmlsec/python-xmlsec',
     project_urls={
         'Documentation': 'https://xmlsec.readthedocs.io',
         'Source': 'https://github.com/mehcode/python-xmlsec',
