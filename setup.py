@@ -2,6 +2,7 @@ import contextlib
 import html.parser
 import io
 import json
+import logging
 import multiprocessing
 import os
 import re
@@ -19,6 +20,7 @@ from urllib.request import Request, urlcleanup, urlopen, urlretrieve
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext as build_ext_orig
 
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "DEBUG"))
 
 class HrefCollector(html.parser.HTMLParser):
     def __init__(self, *args, **kwargs):
@@ -283,6 +285,13 @@ class build_ext(build_ext_orig):
         ext.include_dirs = [str(p.absolute()) for p in includes]
 
     def prepare_static_build(self, build_platform):
+        try:
+            self.__prepare_static_build(build_platform)
+        except:
+            logging.exception("Kaboom")
+            raise
+
+    def __prepare_static_build(self, build_platform):
         self.openssl_version = os.environ.get('PYXMLSEC_OPENSSL_VERSION')
         self.libiconv_version = os.environ.get('PYXMLSEC_LIBICONV_VERSION')
         self.libxml2_version = os.environ.get('PYXMLSEC_LIBXML2_VERSION')
@@ -429,8 +438,15 @@ class build_ext(build_ext_orig):
         env['CFLAGS'] = ' '.join(cflags)
         env['LDFLAGS'] = ' '.join(ldflags)
 
+        def get_glob1(the_glob):
+            the_dir = next(self.build_libs_dir.glob(the_glob), None)
+            if not the_dir:
+                logging.error("uh-huh: ", os.listdir(str(self.build_libs_dir)))
+                raise FileNotFoundError(f'Could not find {the_glob} in {self.build_libs_dir}')
+            return the_dir
+
         self.info('Building OpenSSL')
-        openssl_dir = next(self.build_libs_dir.glob('openssl-*'))
+        openssl_dir = get_glob1('openssl-*')
         openssl_config_cmd = [prefix_arg, 'no-shared', '-fPIC', '--libdir=lib']
         if cross_compiling:
             openssl_config_cmd.insert(0, './Configure')
@@ -444,7 +460,7 @@ class build_ext(build_ext_orig):
         )
 
         self.info('Building zlib')
-        zlib_dir = next(self.build_libs_dir.glob('zlib-*'))
+        zlib_dir = get_glob1('zlib-*')
         subprocess.check_output(['./configure', prefix_arg], cwd=str(zlib_dir), env=env)
         subprocess.check_output(['make', '-j{}'.format(multiprocessing.cpu_count() + 1)], cwd=str(zlib_dir), env=env)
         subprocess.check_output(['make', '-j{}'.format(multiprocessing.cpu_count() + 1), 'install'], cwd=str(zlib_dir), env=env)
@@ -454,7 +470,7 @@ class build_ext(build_ext_orig):
             host_arg = '--host={}'.format(cross_compiling.arch)
 
         self.info('Building libiconv')
-        libiconv_dir = next(self.build_libs_dir.glob('libiconv-*'))
+        libiconv_dir = get_glob1('libiconv-*')
         subprocess.check_output(
             [
                 './configure',
@@ -472,7 +488,7 @@ class build_ext(build_ext_orig):
         )
 
         self.info('Building LibXML2')
-        libxml2_dir = next(self.build_libs_dir.glob('libxml2-*'))
+        libxml2_dir = get_glob1('libxml2-*')
         subprocess.check_output(
             [
                 './configure',
@@ -494,7 +510,7 @@ class build_ext(build_ext_orig):
         )
 
         self.info('Building libxslt')
-        libxslt_dir = next(self.build_libs_dir.glob('libxslt-*'))
+        libxslt_dir = get_glob1('libxslt-*')
         subprocess.check_output(
             [
                 './configure',
@@ -517,7 +533,7 @@ class build_ext(build_ext_orig):
         self.info('Building xmlsec1')
         ldflags.append('-lpthread')
         env['LDFLAGS'] = ' '.join(ldflags)
-        xmlsec1_dir = next(self.build_libs_dir.glob('xmlsec1-*'))
+        xmlsec1_dir = get_glob1('xmlsec1-*')
         subprocess.check_output(
             [
                 './configure',
