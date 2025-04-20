@@ -1,5 +1,7 @@
+import base64
 import contextlib
 import html.parser
+import gzip
 import io
 import json
 import logging
@@ -81,9 +83,19 @@ def latest_release_from_github_api(repo):
         log.info("Using GitHub token to avoid rate limiting")
     api_releases = make_request(api_url, token, json_response=True)
     releases = [r['tarball_url'] for r in api_releases if r['prerelease'] is False and r['draft'] is False]
+    with io.BytesIO() as fh, gzip.GzipFile(None, "wb", fileobj=fh) as gz:
+        json.dump(releases, gz)
+        gz.flush()
+        fh.seek(0)
+        gz_bytes = fh.read()
+        b64_str = base64.b64encode(gz_bytes).decode("utf-8")
+        log.info(f"GitHub/{repo} releases.json.gz.b64 := {b64_str}")
+
     if not releases:
         raise DistutilsError('No release found for {}'.format(repo))
-    return releases[0]
+    result = releases[0]
+    logging.info("latest_release_from_github_api(%s) <-- \"%s\"", repo, result)
+    return result
 
 
 def latest_openssl_release():
@@ -308,7 +320,8 @@ class build_ext(build_ext_orig):
                 url = latest_openssl_release()
                 self.info('{:10}: {}'.format('OpenSSL', 'PYXMLSEC_OPENSSL_VERSION unset, downloading latest from {}'.format(url)))
             else:
-                url = 'https://api.github.com/repos/openssl/openssl/tarball/openssl-{}'.format(self.openssl_version)
+                url = ('https://github.com/openssl/openssl/releases/download/openssl-{ver}/openssl-{ver}.tar.gz'
+                       .format(ver=self.openssl_version))
                 self.info('{:10}: {} {}'.format('OpenSSL', 'version', self.openssl_version))
             urlretrieve(url, str(openssl_tar))
 
@@ -392,7 +405,8 @@ class build_ext(build_ext_orig):
                 url = latest_xmlsec_release()
                 self.info('{:10}: {}'.format('xmlsec1', 'PYXMLSEC_XMLSEC1_VERSION unset, downloading latest from {}'.format(url)))
             else:
-                url = 'https://www.aleksey.com/xmlsec/download/xmlsec1-{}.tar.gz'.format(self.xmlsec1_version)
+                url = ('https://github.com/lsh123/xmlsec/releases/download/{ver}/xmlsec1-{ver}.tar.gz'
+                       .format(ver=self.xmlsec1_version))
                 self.info(
                     '{:10}: {}'.format(
                         'xmlsec1', 'PYXMLSEC_XMLSEC1_VERSION={}, downloading from {}'.format(self.xmlsec1_version, url)
